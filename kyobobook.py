@@ -12,7 +12,7 @@ import re
 st.title("Kyobo Book 신청 시스템")
 
 # 로그인 후 사용자 정보 저장
-if "user" not in st.session_state:
+if not st.session_state["user"]["is_logged_in"]:
     if st.button("Contact with Google"):
         st.login('google')
     st.session_state["user"] = st.user.to_dict()
