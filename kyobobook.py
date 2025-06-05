@@ -16,13 +16,14 @@ if "user" not in st.session_state:
     if st.button("Contact with Google"):
         st.login('google')
     st.session_state["user"] = st.user.to_dict()
-    st.write(st.session_state["user"])
     st.rerun()
 else:
     # 2. 오늘 날짜, 사용자명, 이메일 표시
     seoul = pytz.timezone("Asia/Seoul")
     now = datetime.now(seoul)
     col1, col2, col3, col4 = st.columns(4)
+    st.write(st.session_state["user"])
+
     col1.write(f"**신청시간:** {now.strftime('%Y-%m-%d %H:%M:%S')}")
     col2.write(f"**신청자 성명:** {st.session_state['user']['name']}")
     col3.write(f"**이메일:** {st.session_state['user']['email']}")
