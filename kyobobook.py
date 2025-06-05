@@ -11,6 +11,95 @@ import re
 
 st.title("Kyobo Book 신청 시스템")
 
+def get_book_info_advanced(kyobo_url, max_retries=3):
+    """개선된 도서 정보 추출 함수"""
+    user_agents = [
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15"
+    ]
+    
+    def get_realistic_headers():
+        return {
+            "User-Agent": random.choice(user_agents),
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Accept-Encoding": "gzip, deflate, br",
+            "DNT": "1",
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
+            "Referer": "https://www.google.com/",
+        }
+    
+    session = requests.Session()
+    
+    for attempt in range(max_retries):
+        try:
+            if attempt > 0:
+                time.sleep(random.uniform(2, 5))
+            
+            headers = get_realistic_headers()
+            response = session.get(kyobo_url, headers=headers, timeout=30, verify=False)
+            
+            if response.status_code == 200 and len(response.text) > 1000:
+                soup = BeautifulSoup(response.text, "html.parser")
+                book_info = extract_book_info(soup)
+                
+                if book_info and any(book_info.values()):
+                    return book_info
+                    
+        except Exception as e:
+            continue
+    
+    return None
+
+def extract_book_info(soup):
+    """HTML에서 도서 정보 추출"""
+    title = author = publisher = price = ""
+    
+    # 도서명 추출
+    title_tag = soup.find("meta", property="og:title")
+    if title_tag:
+        title = title_tag.get("content", "").replace(" | 교보문고", "").strip()
+    
+    if not title:
+        title_tag = soup.find("title")
+        if title_tag:
+            title = title_tag.get_text().replace(" | 교보문고", "").strip()
+    
+    # JSON-LD에서 정보 추출
+    json_scripts = soup.find_all("script", type="application/ld+json")
+    for script in json_scripts:
+        try:
+            data = json.loads(script.string)
+            
+            if not title and "name" in data:
+                title = data["name"]
+            
+            if "author" in data and not author:
+                if isinstance(data["author"], list):
+                    author = ", ".join([a.get("name", "") for a in data["author"] if isinstance(a, dict)])
+                elif isinstance(data["author"], dict):
+                    author = data["author"].get("name", "")
+            
+            if "publisher" in data and not publisher:
+                if isinstance(data["publisher"], dict):
+                    publisher = data["publisher"].get("name", "")
+                else:
+                    publisher = str(data["publisher"])
+            
+            if not price:
+                for field in ["price", "lowPrice", "highPrice"]:
+                    if field in data:
+                        price = str(data[field]).replace(",", "")
+                        break
+                        
+        except:
+            continue
+    
+    return {"title": title, "author": author, "publisher": publisher, "price": price}
+
 # 로그인 후 사용자 정보 저장
 if not hasattr(st, "user") or not getattr(st.user, "is_logged_in", False):
     if st.button("Contact with Google"):
