@@ -16,6 +16,7 @@ if "user" not in st.session_state:
     if st.button("Contact with Google"):
         st.login('google')
     st.session_state["user"] = st.user.to_dict()
+    st.write(st.session_state["user"])
     st.rerun()
 else:
     # 2. 오늘 날짜, 사용자명, 이메일 표시
