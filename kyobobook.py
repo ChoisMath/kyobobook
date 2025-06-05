@@ -78,7 +78,7 @@ with tab1:
     st.subheader("새로운 도서 신청")
     
     # Kyobo URL 입력
-    kyobo_url = st.text_input("교보문고 URL을 입력하세요:")
+    kyobo_url = st.text_input("교보문고 URL을 입력하세요: https://product.kyobobook.co.kr/detail/(상품번호:S00000xxxxxxx)")
     
     if kyobo_url:
         # 디버깅을 위한 상세 정보 표시 (일반 사용자용 주석처리)
