@@ -249,14 +249,6 @@ def extract_book_info_enhanced(soup, debug=False):
 # ==================== 개선된 고급 스크래핑 함수 ====================
 def get_book_info_advanced(kyobo_url, max_retries=3, debug=False):
     """개선된 도서 정보 추출 함수"""
-    import os
-    
-    # 웹 환경 체크
-    is_web = os.getenv('STREAMLIT_SHARING_MODE') is not None
-    
-    if is_web and debug:
-        st.warning("⚠️ 웹 환경에서는 스크래핑이 제한될 수 있습니다.")
-    
     user_agents = [
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -274,19 +266,12 @@ def get_book_info_advanced(kyobo_url, max_retries=3, debug=False):
             "Connection": "keep-alive",
             "Upgrade-Insecure-Requests": "1",
             "Referer": "https://www.google.com/",
-            "Cache-Control": "max-age=0",
-            "Sec-Fetch-Dest": "document",
-            "Sec-Fetch-Mode": "navigate",
-            "Sec-Fetch-Site": "none",
-            "Sec-Fetch-User": "?1"
+            "Cache-Control": "max-age=0"
         }
     
     session = requests.Session()
     
-    # 웹 환경에서는 시도 횟수 줄이기
-    actual_retries = 1 if is_web else max_retries
-    
-    for attempt in range(actual_retries):
+    for attempt in range(max_retries):
         try:
             if attempt > 0:
                 time.sleep(random.uniform(2, 5))
@@ -296,15 +281,10 @@ def get_book_info_advanced(kyobo_url, max_retries=3, debug=False):
             # 쿠키 설정 (교보문고 특화)
             session.cookies.set('PCID', str(random.randint(1000000000, 9999999999)))
             
-            # verify 파라미터 조정 (웹 환경에서는 True)
-            verify_ssl = True if is_web else False
-            
-            response = session.get(kyobo_url, headers=headers, timeout=30, verify=verify_ssl)
+            response = session.get(kyobo_url, headers=headers, timeout=30, verify=False)
             
             if debug:
                 st.write(f"[DEBUG] 시도 {attempt+1}: 상태코드={response.status_code}, 크기={len(response.text)}")
-                if len(response.text) < 100:
-                    st.write(f"[DEBUG] 응답 내용: {response.text[:100]}")
             
             if response.status_code == 200 and len(response.text) > 1000:
                 soup = BeautifulSoup(response.text, "html.parser")
@@ -314,13 +294,13 @@ def get_book_info_advanced(kyobo_url, max_retries=3, debug=False):
                 
                 if book_info and any(book_info.values()):
                     # 가격이 없으면 추가 시도
-                    if not book_info.get("price") and not is_web:
+                    if not book_info.get("price"):
                         if debug:
                             st.warning("⚠️ 첫 시도에서 가격을 찾지 못함. 추가 방법 시도 중...")
                         
                         # 페이지 새로고침 후 재시도
                         time.sleep(1)
-                        response = session.get(kyobo_url, headers=get_realistic_headers(), timeout=30, verify=verify_ssl)
+                        response = session.get(kyobo_url, headers=get_realistic_headers(), timeout=30, verify=False)
                         if response.status_code == 200:
                             soup = BeautifulSoup(response.text, "html.parser")
                             price_info = extract_price_advanced(soup, debug=debug)
@@ -334,10 +314,6 @@ def get_book_info_advanced(kyobo_url, max_retries=3, debug=False):
             if debug:
                 st.error(f"[DEBUG] 시도 {attempt+1} 실패: {e}")
             continue
-    
-    # 웹 환경에서 실패 시 안내
-    if is_web and debug:
-        st.info("💡 자동 추출이 실패했습니다. 위의 '대체 입력 방법'을 사용해주세요.")
     
     return None
 
@@ -367,9 +343,6 @@ if "extraction_stats" not in st.session_state:
         "price_failures": [],
         "methods_used": {}
     }
-
-if "extracted_info" not in st.session_state:
-    st.session_state.extracted_info = {}
 
 # ==================== 로그인 처리 ====================
 if not hasattr(st, "user") or not getattr(st.user, "is_logged_in", False):
@@ -418,71 +391,12 @@ tab1, tab2, tab3 = st.tabs(["📚 신규 도서 신청", "🔄 수량 변경", "
 with tab1:
     st.subheader("새로운 도서 신청")
     
-    # 웹 환경 확인 및 안내
-    import os
-    if os.getenv('STREAMLIT_SHARING_MODE') is not None:
-        st.info("""
-        💡 **웹 환경 감지됨**: 자동 추출이 제한될 수 있습니다. 
-        실패 시 아래의 '대체 입력 방법'을 사용해주세요.
-        """)
-    
     # 디버그 모드 체크박스 추가
     col1, col2 = st.columns([3, 1])
     with col1:
         kyobo_url = st.text_input("교보문고 URL을 입력하세요:")
     with col2:
         debug_mode = st.checkbox("🔍 디버그 모드", help="상세한 추출 과정을 확인합니다")
-    
-    # 대체 입력 방법 표시
-    with st.expander("📝 대체 입력 방법 (자동 추출 실패 시)", expanded=False):
-        st.write("""
-        ### 방법 1: 북마크릿 사용 (권장)
-        1. 아래 코드를 복사
-        2. 브라우저 북마크에 추가 (이름: "교보문고 추출")
-        3. 교보문고 페이지에서 북마크 클릭
-        4. 나타난 정보를 복사하여 아래에 붙여넣기
-        """)
-        
-        bookmarklet = """javascript:(function(){var t=document.querySelector('meta[property="og:title"]')?.content||document.querySelector('h1')?.innerText||'',p=document.querySelector('.sell_price')?.innerText||document.querySelector('.val')?.innerText||'',a='',b='';document.querySelectorAll('script[type="application/ld+json"]').forEach(s=>{try{var d=JSON.parse(s.innerText);if(d.author)a=d.author.name||d.author;if(d.publisher)b=d.publisher.name||d.publisher;}catch(e){}});var r=t.replace(' | 교보문고','')+' | '+a+' | '+b+' | '+p.replace(/[^0-9]/g,'');prompt('복사하세요:',r);})();"""
-        
-        st.code(bookmarklet, language="javascript")
-        
-        bookmarklet_input = st.text_input("북마크릿 결과를 붙여넣으세요 (제목 | 저자 | 출판사 | 가격):")
-        
-        if bookmarklet_input:
-            parts = bookmarklet_input.split(' | ')
-            if len(parts) >= 4:
-                st.session_state['extracted_info'] = {
-                    'title': parts[0].strip(),
-                    'author': parts[1].strip(),
-                    'publisher': parts[2].strip(),
-                    'price': parts[3].strip(),
-                    'url': kyobo_url
-                }
-                st.success("✅ 정보 추출 완료!")
-        
-        st.write("---")
-        st.write("### 방법 2: 수동 입력")
-        manual_col1, manual_col2 = st.columns(2)
-        with manual_col1:
-            manual_title = st.text_input("도서명", key="manual_title_tab1")
-            manual_author = st.text_input("저자명", key="manual_author_tab1")
-        with manual_col2:
-            manual_publisher = st.text_input("출판사", key="manual_publisher_tab1")
-            manual_price = st.text_input("가격 (숫자만)", key="manual_price_tab1")
-        
-        if st.button("수동 입력 정보 사용", key="use_manual_tab1"):
-            if all([manual_title, manual_author, manual_publisher, manual_price]):
-                st.session_state['extracted_info'] = {
-                    'title': manual_title,
-                    'author': manual_author,
-                    'publisher': manual_publisher,
-                    'price': manual_price,
-                    'url': kyobo_url
-                }
-                st.success("✅ 수동 입력 완료!")
-            else:
-                st.error("모든 필드를 입력해주세요.")
     
     if kyobo_url:
         status_container = st.container()
@@ -587,16 +501,6 @@ with tab1:
                         preview = res.text[:500].replace('<', '&lt;').replace('>', '&gt;')
                         st.text_area("응답 미리보기:", preview, height=100)
             
-            # 세션 상태에 저장된 정보가 있으면 우선 사용
-            if 'extracted_info' in st.session_state and st.session_state['extracted_info'].get('url') == kyobo_url:
-                info = st.session_state['extracted_info']
-                title = info.get('title', '')
-                author = info.get('author', '')
-                publisher = info.get('publisher', '')
-                price = info.get('price', '')
-                extraction_success = True
-                extraction_method = "대체 입력 방법"
-            
             # 추출 성공 시 정보 표시 및 신청 처리
             if extraction_success and any([title, author, publisher]):
                 # 수량 및 가격 계산
@@ -654,11 +558,6 @@ with tab1:
                             ])
                             st.success("✅ 도서 신청이 완료되었습니다!")
                             st.balloons()
-                            
-                            # 세션 상태 정리
-                            if 'extracted_info' in st.session_state:
-                                del st.session_state['extracted_info']
-                                
                         except Exception as e:
                             st.error(f"❌ 신청 중 오류가 발생했습니다: {e}")
                 else:
